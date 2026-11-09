@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>車を運転しよう</title>
+<script src="three.js"></script>
+<style>
+  body { margin: 0; overflow: hidden; background: #b9d9ef; }
+  #help { position: fixed; top: 12px; left: 12px; padding: 10px 14px; color: #fff; background: #17212dcc; border-radius: 8px; font: 16px sans-serif; }
+  #cameraButton { position: fixed; top: 12px; right: 12px; padding: 11px 16px; border: 0; border-radius: 8px; color: white; background: #17212dcc; font: 16px sans-serif; cursor: pointer; }
+  #cameraButton:hover { background: #17212d; }
+  #controls { position: fixed; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; color: #fff; background: #17212dcc; border-radius: 8px; font: 15px sans-serif; }
+  .controlRow { display: flex; align-items: center; gap: 8px; }
+  #controls button { border: 0; border-radius: 6px; padding: 7px 10px; color: #fff; background: #394957; font: inherit; cursor: pointer; }
+  #controls input { width: 130px; }
+</style>
+</head>
+<body>
+<div id="help">↓ 前進　↑ 後退　← → ハンドル（左右反転）</div>
+<div id="controls">
+  <div class="controlRow">
+    <label for="speedControl">速度</label>
+    <input id="speedControl" type="range" min="0.5" max="3" step="0.5" value="2">
+    <span id="speedValue">2.0倍</span>
+  </div>
+  <div class="controlRow">
+    <span>視点</span>
+    <button id="cameraMode" type="button">一人称視点</button>
+    <button id="cameraLeft" type="button">← 左</button>
+    <button id="cameraRight" type="button">右 →</button>
+  </div>
+  <div class="controlRow">
+    <label for="trafficInterval">横からの車の間隔</label>
+    <input id="trafficInterval" type="range" min="1" max="10" step="0.5" value="3.5">
+    <span id="trafficIntervalValue">3.5秒</span>
+  </div>
+</div>
+<script>
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xb9d9ef);
+scene.fog = new THREE.Fog(0xb9d9ef, 12000, 50000);
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 1, 100000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x64745a, 2));
+const sun = new THREE.DirectionalLight(0xffffff, 2);
+sun.position.set(-3000, 6000, 4000);
+sun.castShadow = true;
+scene.add(sun);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(100000, 100000), new THREE.MeshStandardMaterial({ color: 0x668b4e, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -300;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// 十字路：交差する2本の道路と車線・横断歩道
+const asphalt = new THREE.MeshStandardMaterial({ color: 0x34383d, roughness: 0.95 });
+const roadAlongX = new THREE.Mesh(new THREE.BoxGeometry(50000, 24, 3600), asphalt);
+roadAlongX.position.y = -286;
+roadAlongX.receiveShadow = true;
+scene.add(roadAlongX);
+const roadAlongZ = new THREE.Mesh(new THREE.BoxGeometry(3600, 26, 50000), asphalt);
+roadAlongZ.position.y = -284;
+roadAlongZ.receiveShadow = true;
+scene.add(roadAlongZ);
+const paint = new THREE.MeshStandardMaterial({ color: 0xf4f0d8, roughness: 0.8 });
+function roadMark(w, h, d, x, y, z, material = paint) {
+  const mark = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+  mark.position.set(x, y, z);
+  scene.add(mark);
+}
+for (let x = -24000; x <= 24000; x += 1800) roadMark(900, 8, 35, x, -267, 0);
+for (let z = -24000; z <= 24000; z += 1800) roadMark(35, 8, 900, 0, -266, z);
+for (let i = -5; i <= 5; i++) {
+  roadMark(150, 8, 650, i * 260, -264, -2050);
+  roadMark(650, 8, 150, -2050, -264, i * 260);
+}
+const yellowPaint = new THREE.MeshStandardMaterial({ color: 0xf4c542, roughness: 0.8 });
+roadMark(50000, 8, 28, 0, -265, 0, yellowPaint);
+roadMark(28, 8, 50000, 0, -264, 0, yellowPaint);
+
+// 操作する車
+const car = new THREE.Group();
+scene.add(car);
+car.position.set(-700, 0, 6000);
+// Nマークが車の前に来るよう、車体とマークを一緒に180度回転します。
+car.rotation.y = Math.PI;
+// 車は交差点の手前（Zのプラス側）からスタートします。
+const body = new THREE.Mesh(new THREE.BoxGeometry(900, 400, 2000), new THREE.MeshStandardMaterial({ color: 0xe74732, roughness: 0.55 }));
+body.position.y = -20;
+body.castShadow = true;
+body.receiveShadow = true;
+car.add(body);
+const roof = new THREE.Mesh(new THREE.BoxGeometry(760, 330, 1050), new THREE.MeshStandardMaterial({ color: 0xbfe4ed, roughness: 0.3, metalness: 0.15 }));
+roof.position.set(0, 345, -120);
+roof.castShadow = true;
+car.add(roof);
+const wheels = [];
+const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x202124, roughness: 0.9 });
+const hubMaterial = new THREE.MeshStandardMaterial({ color: 0xc8cbd0, metalness: 0.65, roughness: 0.3 });
+for (const x of [-520, 520]) {
+  for (const z of [-620, 650]) {
+    const wheel = new THREE.Group();
+    wheel.position.set(x, -130, z);
+    const tire = new THREE.Mesh(new THREE.CylinderGeometry(180, 180, 130, 32), tireMaterial);
+        tire.rotation.z = Math.PI / 2;
+    tire.castShadow = true;
+    wheel.add(tire);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(92, 92, 136, 24), hubMaterial);
+    hub.rotation.z = Math.PI / 2;
+    wheel.add(hub);
+    car.add(wheel);
+    wheels.push(wheel);
+  }
+}
+
+// 車の前後左右が分かるよう、車体の周囲に方角マークを表示します。
+function addDirectionMark(label, x, z) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const context = canvas.getContext('2d');
+  context.fillStyle = 'rgba(255,255,255,0.94)';
+  context.beginPath();
+  context.arc(128, 128, 112, 0, Math.PI * 2);
+  context.fill();
+  context.strokeStyle = '#17212d';
+  context.lineWidth = 12;
+  context.stroke();
+  context.fillStyle = '#17212d';
+  context.font = 'bold 150px sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(label, 128, 133);
+  const texture = new THREE.CanvasTexture(canvas);
+  const mark = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
+  mark.position.set(x, 780, z);
+  mark.scale.set(360, 360, 1);
+  car.add(mark);
+}
+addDirectionMark('N', 0, 1450);
+addDirectionMark('E', 850, 0);
+addDirectionMark('W', -850, 0);
+addDirectionMark('S', 0, -1450);
+
+// 約3.5秒ごとに交差点を横切る車。操作車と同じ寸法です。
+const traffic = [];
+let trafficTimer = 0.8;
+const explosions = [];
+const trafficInterval = document.getElementById('trafficInterval');
+const trafficIntervalValue = document.getElementById('trafficIntervalValue');
+trafficInterval.addEventListener('input', () => { trafficIntervalValue.textContent = `${Number(trafficInterval.value).toFixed(1)}秒`; });
+function makeTrafficCar() {
+  const vehicle = new THREE.Group();
+  const color = [0x2878c7, 0xf4c542, 0xeeeeee, 0x38a06c][Math.floor(Math.random() * 4)];
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(900, 400, 2000), new THREE.MeshStandardMaterial({ color, roughness: 0.55 }));
+  shell.position.y = -20;
+  shell.castShadow = true;
+  vehicle.add(shell);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(760, 330, 1050), new THREE.MeshStandardMaterial({ color: 0xa9d6e5, roughness: 0.3 }));
+  cabin.position.set(0, 345, -120);
+  vehicle.add(cabin);
+  for (const x of [-520, 520]) {
+    for (const z of [-620, 650]) {
+      const tire = new THREE.Mesh(new THREE.CylinderGeometry(180, 180, 130, 32), tireMaterial);
+          tire.rotation.z = Math.PI / 2;
+      tire.position.set(x, -130, z);
+      vehicle.add(tire);
+    }
+  }
+  // +X方向へ進む車は、進行方向に対して左側（道路の-Z側）を走ります。
+  vehicle.position.set(-7000, 0, -700);
+  vehicle.rotation.y = Math.PI / 2;
+  scene.add(vehicle);
+  traffic.push(vehicle);
+}
+
+function explodeAt(position) {
+  const particles = [];
+  const colors = [0xff3b16, 0xffa321, 0xffe56b, 0x555555];
+  for (let i = 0; i < 32; i++) {
+    const particle = new THREE.Mesh(
+      new THREE.SphereGeometry(45 + Math.random() * 55, 8, 8),
+      new THREE.MeshBasicMaterial({ color: colors[Math.floor(Math.random() * colors.length)], transparent: true })
+    );
+    particle.position.copy(position);
+    scene.add(particle);
+    particles.push({ mesh: particle, velocity: new THREE.Vector3((Math.random() - 0.5) * 2200, Math.random() * 1800, (Math.random() - 0.5) * 2200) });
+  }
+  explosions.push({ particles, age: 0 });
+}
+
+const keys = Object.create(null);
+window.addEventListener('keydown', (event) => {
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) event.preventDefault();
+  keys[event.key] = true;
+});
+window.addEventListener('keyup', (event) => { keys[event.key] = false; });
+window.addEventListener('blur', () => { for (const key in keys) keys[key] = false; });
+
+let speed = 0;
+let movementYaw = car.rotation.y;
+let cameraYaw = 0;
+let firstPersonView = false;
+const speedControl = document.getElementById('speedControl');
+const speedValue = document.getElementById('speedValue');
+speedControl.addEventListener('input', () => { speedValue.textContent = `${Number(speedControl.value).toFixed(1)}倍`; });
+document.getElementById('cameraLeft').addEventListener('click', () => { cameraYaw += Math.PI / 2; });
+document.getElementById('cameraRight').addEventListener('click', () => { cameraYaw -= Math.PI / 2; });
+document.getElementById('cameraMode').addEventListener('click', (event) => {
+  firstPersonView = !firstPersonView;
+  event.currentTarget.textContent = firstPersonView ? '三人称視点' : '一人称視点';
+});
+const clock = new THREE.Clock();
+function carsOverlap(a, b) {
+  // 車体の長方形同士を、各車の向きに沿った軸で判定します。
+  const halfWidth = 450;
+  const halfLength = 1000;
+  const axes = [];
+  for (const vehicle of [a, b]) {
+    const yaw = vehicle.rotation.y;
+    axes.push({ x: Math.cos(yaw), z: -Math.sin(yaw) });
+    axes.push({ x: Math.sin(yaw), z: Math.cos(yaw) });
+  }
+  const dx = b.position.x - a.position.x;
+  const dz = b.position.z - a.position.z;
+  for (const axis of axes) {
+    const distance = Math.abs(dx * axis.x + dz * axis.z);
+    const radiusA = Math.abs((Math.cos(a.rotation.y) * axis.x - Math.sin(a.rotation.y) * axis.z)) * halfWidth
+      + Math.abs((Math.sin(a.rotation.y) * axis.x + Math.cos(a.rotation.y) * axis.z)) * halfLength;
+    const radiusB = Math.abs((Math.cos(b.rotation.y) * axis.x - Math.sin(b.rotation.y) * axis.z)) * halfWidth
+      + Math.abs((Math.sin(b.rotation.y) * axis.x + Math.cos(b.rotation.y) * axis.z)) * halfLength;
+    if (distance > radiusA + radiusB) return false;
+  }
+  return true;
+}
+function draw() {
+  requestAnimationFrame(draw);
+    const dt = Math.min(clock.getDelta(), 0.05);
+  trafficTimer -= dt;
+  if (trafficTimer <= 0) { makeTrafficCar(); trafficTimer = Number(trafficInterval.value); }
+    for (let i = traffic.length - 1; i >= 0; i--) {
+    const vehicle = traffic[i];
+    vehicle.position.x += 1500 * dt;
+    if (carsOverlap(car, vehicle)) {
+      explodeAt(new THREE.Vector3((vehicle.position.x + car.position.x) / 2, 180, (vehicle.position.z + car.position.z) / 2));
+      scene.remove(vehicle);
+      traffic.splice(i, 1);
+      speed *= 0.25;
+    } else if (vehicle.position.x > 7000) { scene.remove(vehicle); traffic.splice(i, 1); }
+  }
+  for (let i = explosions.length - 1; i >= 0; i--) {
+    const effect = explosions[i];
+    effect.age += dt;
+    for (const particle of effect.particles) {
+      particle.mesh.position.addScaledVector(particle.velocity, dt);
+      particle.velocity.y -= 900 * dt;
+      particle.mesh.material.opacity = Math.max(0, 1 - effect.age / 1.1);
+    }
+    if (effect.age >= 1.1) {
+      for (const particle of effect.particles) { scene.remove(particle.mesh); particle.mesh.geometry.dispose(); particle.mesh.material.dispose(); }
+      explosions.splice(i, 1);
+    }
+  }
+
+  // 前後のキー操作を反転します。
+  const speedMultiplier = Number(speedControl.value);
+  const maxSpeed = 2600 * speedMultiplier;
+  if (keys.ArrowDown) speed = Math.min(speed + 900 * speedMultiplier * dt, maxSpeed);
+  else if (keys.ArrowUp) speed = Math.max(speed - 1100 * speedMultiplier * dt, -1000 * speedMultiplier);
+  else speed *= Math.pow(0.985, dt * 60);
+  const steering = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
+  if (steering !== 0) {
+    const turnAmount = steering * 0.9 * dt * (Math.abs(speed) > 5 ? Math.sign(speed) : 1);
+    movementYaw -= turnAmount;
+    car.rotation.y += turnAmount;
+  }
+  if (Math.abs(speed) > 5) {
+
+
+        car.position.x += Math.sin(movementYaw) * speed * dt;
+    car.position.z -= Math.cos(movementYaw) * speed * dt;
+    for (const wheel of wheels) wheel.rotation.x += speed * dt / 180;
+  }
+
+  // カメラの向きは車のハンドル操作から独立。ボタンで90度ずつ切り替えます。
+  if (firstPersonView) {
+    const cameraPosition = car.localToWorld(new THREE.Vector3(0, 590, 430));
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(car.quaternion);
+    camera.position.copy(cameraPosition);
+    camera.lookAt(cameraPosition.clone().addScaledVector(forward, 5000));
+  } else {
+    const cameraBehind = new THREE.Vector3(Math.sin(cameraYaw), 0, Math.cos(cameraYaw));
+    const target = car.position.clone().add(new THREE.Vector3(0, 180, 0));
+    const cameraPosition = car.position.clone().addScaledVector(cameraBehind, 3200);
+    cameraPosition.y += 1900;
+    camera.position.lerp(cameraPosition, 1 - Math.pow(0.001, dt));
+    camera.lookAt(target);
+  }
+  renderer.render(scene, camera);
+}
+draw();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
