@@ -25,6 +25,7 @@
   #controls button { border: 0; border-radius: 6px; padding: 7px 10px; color: #fff; background: #394957; font: inherit; cursor: pointer; }
   /* スライダーの横幅を設定します。 */
   #controls input { width: 130px; }
+  #controls button.active { background: #d18a16; }
 </style>
 </head>
 <body>
@@ -42,6 +43,9 @@
     <button id="cameraMode" type="button">一人称視点</button>
     <button id="cameraLeft" type="button">← 左</button>
     <button id="cameraRight" type="button">右 →</button>
+  </div>
+  <div class="controlRow">
+    <span>ライト</span><button id="headlightButton" type="button" aria-pressed="false">前照灯 OFF</button><button id="leftSignalButton" type="button" aria-pressed="false">← 左ウィンカー</button><button id="rightSignalButton" type="button" aria-pressed="false">右ウィンカー →</button>
   </div>
   <div class="controlRow">
     <label for="trafficInterval">横からの車の間隔</label>
@@ -118,6 +122,41 @@ body.position.y = -20;
 body.castShadow = true;
 body.receiveShadow = true;
 car.add(body);
+// 前照灯と後部ランプを車体に取り付けます。前照灯はボタンで照射します。
+const headlightBulbs = [];
+const headlightSpots = [];
+for (const x of [-300, 300]) {
+  const bulb = new THREE.Mesh(new THREE.BoxGeometry(180, 100, 28), new THREE.MeshStandardMaterial({ color: 0xfff1b0, emissive: 0x000000 }));
+  bulb.position.set(x, 75, -1008);
+  car.add(bulb);
+  headlightBulbs.push(bulb);
+  const target = new THREE.Object3D();
+  target.position.set(x, 40, -6500);
+  car.add(target);
+  const spot = new THREE.SpotLight(0xfff1c2, 0, 9000, Math.PI / 7, 0.35, 1.2);
+  spot.position.set(x, 65, -990);
+  spot.target = target;
+  car.add(spot);
+  headlightSpots.push(spot);
+}
+const rearLamps = [];
+for (const x of [-300, 300]) {
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(180, 110, 30), new THREE.MeshStandardMaterial({ color: 0x4d0808, emissive: 0x000000 }));
+  lamp.position.set(x, 75, 1008);
+  car.add(lamp);
+  rearLamps.push(lamp);
+}
+const signalLamps = { left: [], right: [] };
+for (const x of [-390, 390]) {
+  const side = x < 0 ? 'left' : 'right';
+  for (const z of [-1005, 1005]) {
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(95, 90, 32), new THREE.MeshStandardMaterial({ color: 0x5a3200, emissive: 0x000000 }));
+    lamp.position.set(x, 95, z);
+    car.add(lamp);
+    signalLamps[side].push(lamp);
+  }
+}
+
 const roof = new THREE.Mesh(new THREE.BoxGeometry(760, 330, 1050), new THREE.MeshStandardMaterial({ color: 0xbfe4ed, roughness: 0.3, metalness: 0.15 }));
 roof.position.set(0, 345, -120);
 roof.castShadow = true;
@@ -247,6 +286,31 @@ document.getElementById('cameraMode').addEventListener('click', (event) => {
   event.currentTarget.textContent = firstPersonView ? '三人称視点' : '一人称視点';
 });
 // フレーム間の経過時間を測り、動きを画面更新頻度に左右されにくくします。
+let headlightsOn = false;
+let activeSignal = null;
+let signalElapsed = 0;
+const headlightButton = document.getElementById('headlightButton');
+const leftSignalButton = document.getElementById('leftSignalButton');
+const rightSignalButton = document.getElementById('rightSignalButton');
+function setSignal(side) {
+  activeSignal = activeSignal === side ? null : side;
+  for (const [name, button] of [['left', leftSignalButton], ['right', rightSignalButton]]) {
+    const isActive = activeSignal === name;
+    button.classList.toggle('active', isActive);
+    button.setAttribute('aria-pressed', String(isActive));
+  }
+}
+headlightButton.addEventListener('click', () => {
+  headlightsOn = !headlightsOn;
+  headlightButton.textContent = headlightsOn ? '前照灯 ON' : '前照灯 OFF';
+  headlightButton.classList.toggle('active', headlightsOn);
+  headlightButton.setAttribute('aria-pressed', String(headlightsOn));
+  for (const bulb of headlightBulbs) bulb.material.emissive.setHex(headlightsOn ? 0xffe48a : 0x000000);
+  for (const spot of headlightSpots) spot.intensity = headlightsOn ? 8 : 0;
+});
+leftSignalButton.addEventListener('click', () => setSignal('left'));
+rightSignalButton.addEventListener('click', () => setSignal('right'));
+
 const clock = new THREE.Clock();
 // 2台の車の向きを考慮し、矩形の車体が接触しているか判定します。
 function carsOverlap(a, b) {
@@ -301,6 +365,21 @@ function draw() {
     }
   }
 
+  // ↑キーで減速している間は後部のブレーキランプを赤く点灯します。
+  const braking = keys.ArrowUp && speed > 0;
+  for (const lamp of rearLamps) {
+    lamp.material.emissive.setHex(braking ? 0xff0000 : 0x000000);
+    lamp.material.color.setHex(braking ? 0xff2525 : 0x4d0808);
+  }
+  signalElapsed += dt;
+  const signalLit = activeSignal !== null && Math.floor(signalElapsed / 0.45) % 2 === 0;
+  for (const [side, lamps] of Object.entries(signalLamps)) {
+    for (const lamp of lamps) {
+      const on = side === activeSignal && signalLit;
+      lamp.material.emissive.setHex(on ? 0xff9d00 : 0x000000);
+      lamp.material.color.setHex(on ? 0xffb21c : 0x5a3200);
+    }
+  }
   // 前後のキー操作を反転します。
   const speedMultiplier = Number(speedControl.value);
   const maxSpeed = 2600 * speedMultiplier;
