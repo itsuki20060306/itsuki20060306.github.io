@@ -48,9 +48,9 @@
     <span>ライト</span><button id="headlightButton" type="button" aria-pressed="false">前照灯 OFF</button><button id="leftSignalButton" type="button" aria-pressed="false">← 左ウィンカー</button><button id="rightSignalButton" type="button" aria-pressed="false">右ウィンカー →</button>
   </div>
   <div class="controlRow">
-    <label for="trafficInterval">横からの車の間隔</label>
-    <input id="trafficInterval" type="range" min="1" max="10" step="0.5" value="3.5">
-    <span id="trafficIntervalValue">3.5秒</span>
+    <label for="trafficInterval">後ろから来る車の間隔</label>
+    <input id="trafficInterval" type="range" min="1" max="10" step="0.5" value="5">
+    <span id="trafficIntervalValue">5.0秒</span>
   </div>
 </div>
 <script>
@@ -81,12 +81,8 @@ ground.position.y = -300;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// 十字路：交差する2本の道路と車線・横断歩道
+// 直線道路：前後に長く続く一本道です。
 const asphalt = new THREE.MeshStandardMaterial({ color: 0x34383d, roughness: 0.95 });
-const roadAlongX = new THREE.Mesh(new THREE.BoxGeometry(50000, 24, 3600), asphalt);
-roadAlongX.position.y = -286;
-roadAlongX.receiveShadow = true;
-scene.add(roadAlongX);
 const roadAlongZ = new THREE.Mesh(new THREE.BoxGeometry(3600, 26, 50000), asphalt);
 roadAlongZ.position.y = -284;
 roadAlongZ.receiveShadow = true;
@@ -98,15 +94,8 @@ function roadMark(w, h, d, x, y, z, material = paint) {
   mark.position.set(x, y, z);
   scene.add(mark);
 }
-for (let x = -24000; x <= 24000; x += 1800) roadMark(900, 8, 35, x, -267, 0);
+// 直線道路の中央に破線を引きます。交差点の標示はありません。
 for (let z = -24000; z <= 24000; z += 1800) roadMark(35, 8, 900, 0, -266, z);
-for (let i = -5; i <= 5; i++) {
-  roadMark(150, 8, 650, i * 260, -264, -2050);
-  roadMark(650, 8, 150, -2050, -264, i * 260);
-}
-const yellowPaint = new THREE.MeshStandardMaterial({ color: 0xf4c542, roughness: 0.8 });
-roadMark(50000, 8, 28, 0, -265, 0, yellowPaint);
-roadMark(28, 8, 50000, 0, -264, 0, yellowPaint);
 
 // 操作する車
 // プレイヤーが操作する車を複数の部品で組み立てる親グループです。
@@ -115,7 +104,7 @@ scene.add(car);
 car.position.set(-700, 0, 6000);
 // Nマークが車の前に来るよう、車体とマークを一緒に180度回転します。
 car.rotation.y = Math.PI;
-// 車は交差点の手前（Zのプラス側）からスタートします。
+// 車は直線道路のZプラス側からスタートします。
 // 車体、屋根、タイヤを作成し、親グループにまとめます。
 const body = new THREE.Mesh(new THREE.BoxGeometry(900, 400, 2000), new THREE.MeshStandardMaterial({ color: 0xe74732, roughness: 0.55 }));
 body.position.y = -20;
@@ -211,10 +200,10 @@ addDirectionMark('E', -850, 0);
 addDirectionMark('W', 850, 0);
 addDirectionMark('S', 0, -1450);
 
-// 約3.5秒ごとに交差点を横切る車。操作車と同じ寸法です。
-// 交差点を横切る車と、出現タイマー・衝突エフェクトを管理します。
+// 一定間隔で道路端に現れ、道路を端から端まで走る車です。
+// 道路端から端まで走る車と、出現タイマー・衝突エフェクトを管理します。
 const traffic = [];
-let trafficTimer = 0.8;
+let trafficTimer = 5;
 const explosions = [];
 const trafficInterval = document.getElementById('trafficInterval');
 const trafficIntervalValue = document.getElementById('trafficIntervalValue');
@@ -239,8 +228,8 @@ function makeTrafficCar() {
     }
   }
   // +X方向へ進む車は、進行方向に対して左側（道路の-Z側）を走ります。
-  vehicle.position.set(-7000, 0, -700);
-  vehicle.rotation.y = Math.PI / 2;
+  vehicle.position.set(-900, 0, 24000);
+  vehicle.rotation.y = Math.PI;
   // 交通車にも前照灯と赤い後部灯を付けます。車はローカル+Z方向へ進みます。
   for (const x of [-300, 300]) {
     const headlamp = new THREE.Mesh(new THREE.BoxGeometry(180, 100, 28), new THREE.MeshStandardMaterial({ color: 0xfff1b0, emissive: 0xffd966, emissiveIntensity: 1.4 }));
@@ -360,13 +349,13 @@ function draw() {
   if (trafficTimer <= 0) { makeTrafficCar(); trafficTimer = Number(trafficInterval.value); }
     for (let i = traffic.length - 1; i >= 0; i--) {
     const vehicle = traffic[i];
-    vehicle.position.x += 1500 * dt;
+    vehicle.position.z -= 1500 * dt;
     if (carsOverlap(car, vehicle)) {
       explodeAt(new THREE.Vector3((vehicle.position.x + car.position.x) / 2, 180, (vehicle.position.z + car.position.z) / 2));
       scene.remove(vehicle);
       traffic.splice(i, 1);
       speed *= 0.25;
-    } else if (vehicle.position.x > 7000) { scene.remove(vehicle); traffic.splice(i, 1); }
+    } else if (vehicle.position.z < -26000) { scene.remove(vehicle); traffic.splice(i, 1); }
   }
   for (let i = explosions.length - 1; i >= 0; i--) {
     const effect = explosions[i];
