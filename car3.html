@@ -1,23 +1,36 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<!-- ページの文字コードや表示領域など、文書全体の基本設定です。 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>車を運転しよう</title>
+<!-- 3D表示を作るThree.jsライブラリを読み込みます。 -->
 <script src="three.js"></script>
+<!-- 画面全体と操作パネルの見た目・配置を指定します。 -->
 <style>
+  /* 余白をなくし、3D画面をウィンドウいっぱいに表示します。 */
   body { margin: 0; overflow: hidden; background: #b9d9ef; }
+  /* キーボード操作の説明を左上に固定表示します。 */
   #help { position: fixed; top: 12px; left: 12px; padding: 10px 14px; color: #fff; background: #17212dcc; border-radius: 8px; font: 16px sans-serif; }
+  /* カメラ切り替えボタンの基本デザインです（現行HTMLでは未使用）。 */
   #cameraButton { position: fixed; top: 12px; right: 12px; padding: 11px 16px; border: 0; border-radius: 8px; color: white; background: #17212dcc; font: 16px sans-serif; cursor: pointer; }
+  /* カメラボタンにマウスを載せたときの色です。 */
   #cameraButton:hover { background: #17212d; }
+  /* 速度・視点・交通量の設定パネルを右上に配置します。 */
   #controls { position: fixed; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; color: #fff; background: #17212dcc; border-radius: 8px; font: 15px sans-serif; }
+  /* パネル内の各設定を横並びにそろえます。 */
   .controlRow { display: flex; align-items: center; gap: 8px; }
+  /* 操作パネル内のボタンの見た目を統一します。 */
   #controls button { border: 0; border-radius: 6px; padding: 7px 10px; color: #fff; background: #394957; font: inherit; cursor: pointer; }
+  /* スライダーの横幅を設定します。 */
   #controls input { width: 130px; }
 </style>
 </head>
 <body>
+<!-- キー操作の簡単な案内です。 -->
 <div id="help">↓ 前進　↑ 後退　← → ハンドル（左右反転）</div>
+<!-- 速度倍率、カメラ視点、横切る車の出現間隔を調整するUIです。 -->
 <div id="controls">
   <div class="controlRow">
     <label for="speedControl">速度</label>
@@ -37,22 +50,27 @@
   </div>
 </div>
 <script>
+// 3Dオブジェクトを配置する舞台です。
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xb9d9ef);
 scene.fog = new THREE.Fog(0xb9d9ef, 12000, 50000);
+// プレイヤーが見る視点。画角や描画距離もここで決めます。
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 1, 100000);
+// WebGLで3Dを画面に描く装置を用意します。
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
+// 空と地面からの環境光、および影を作る太陽光を追加します。
 scene.add(new THREE.HemisphereLight(0xffffff, 0x64745a, 2));
 const sun = new THREE.DirectionalLight(0xffffff, 2);
 sun.position.set(-3000, 6000, 4000);
 sun.castShadow = true;
 scene.add(sun);
 
+// 道路の周囲に広がる地面です。
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(100000, 100000), new THREE.MeshStandardMaterial({ color: 0x668b4e, roughness: 1 }));
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -300;
@@ -70,6 +88,7 @@ roadAlongZ.position.y = -284;
 roadAlongZ.receiveShadow = true;
 scene.add(roadAlongZ);
 const paint = new THREE.MeshStandardMaterial({ color: 0xf4f0d8, roughness: 0.8 });
+// 道路の線や横断歩道を簡単に作る共通関数です。
 function roadMark(w, h, d, x, y, z, material = paint) {
   const mark = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
   mark.position.set(x, y, z);
@@ -86,12 +105,14 @@ roadMark(50000, 8, 28, 0, -265, 0, yellowPaint);
 roadMark(28, 8, 50000, 0, -264, 0, yellowPaint);
 
 // 操作する車
+// プレイヤーが操作する車を複数の部品で組み立てる親グループです。
 const car = new THREE.Group();
 scene.add(car);
 car.position.set(-700, 0, 6000);
 // Nマークが車の前に来るよう、車体とマークを一緒に180度回転します。
 car.rotation.y = Math.PI;
 // 車は交差点の手前（Zのプラス側）からスタートします。
+// 車体、屋根、タイヤを作成し、親グループにまとめます。
 const body = new THREE.Mesh(new THREE.BoxGeometry(900, 400, 2000), new THREE.MeshStandardMaterial({ color: 0xe74732, roughness: 0.55 }));
 body.position.y = -20;
 body.castShadow = true;
@@ -101,6 +122,7 @@ const roof = new THREE.Mesh(new THREE.BoxGeometry(760, 330, 1050), new THREE.Mes
 roof.position.set(0, 345, -120);
 roof.castShadow = true;
 car.add(roof);
+// タイヤのグループを保存し、走行時に回転させます。
 const wheels = [];
 const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x202124, roughness: 0.9 });
 const hubMaterial = new THREE.MeshStandardMaterial({ color: 0xc8cbd0, metalness: 0.65, roughness: 0.3 });
@@ -121,6 +143,7 @@ for (const x of [-520, 520]) {
 }
 
 // 車の前後左右が分かるよう、車体の周囲に方角マークを表示します。
+// 車の周囲に方角を示すラベルを描画して取り付けます。
 function addDirectionMark(label, x, z) {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
@@ -150,12 +173,14 @@ addDirectionMark('W', -850, 0);
 addDirectionMark('S', 0, -1450);
 
 // 約3.5秒ごとに交差点を横切る車。操作車と同じ寸法です。
+// 交差点を横切る車と、出現タイマー・衝突エフェクトを管理します。
 const traffic = [];
 let trafficTimer = 0.8;
 const explosions = [];
 const trafficInterval = document.getElementById('trafficInterval');
 const trafficIntervalValue = document.getElementById('trafficIntervalValue');
 trafficInterval.addEventListener('input', () => { trafficIntervalValue.textContent = `${Number(trafficInterval.value).toFixed(1)}秒`; });
+// 対向交通の車をランダムな色で作り、道路上に出現させます。
 function makeTrafficCar() {
   const vehicle = new THREE.Group();
   const color = [0x2878c7, 0xf4c542, 0xeeeeee, 0x38a06c][Math.floor(Math.random() * 4)];
@@ -181,6 +206,7 @@ function makeTrafficCar() {
   traffic.push(vehicle);
 }
 
+// 衝突位置に粒子を発生させる爆発表現を作ります。
 function explodeAt(position) {
   const particles = [];
   const colors = [0xff3b16, 0xffa321, 0xffe56b, 0x555555];
@@ -196,6 +222,7 @@ function explodeAt(position) {
   explosions.push({ particles, age: 0 });
 }
 
+// 押されているキーを記録し、押下・解放・ウィンドウ離脱を追跡します。
 const keys = Object.create(null);
 window.addEventListener('keydown', (event) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) event.preventDefault();
@@ -204,10 +231,12 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('keyup', (event) => { keys[event.key] = false; });
 window.addEventListener('blur', () => { for (const key in keys) keys[key] = false; });
 
+// 車速・車の進行向き・カメラ向き・一人称視点の状態を保持します。
 let speed = 0;
 let movementYaw = car.rotation.y;
 let cameraYaw = 0;
 let firstPersonView = false;
+// UI部品を取得し、スライダーやボタンの操作をゲーム状態へ反映します。
 const speedControl = document.getElementById('speedControl');
 const speedValue = document.getElementById('speedValue');
 speedControl.addEventListener('input', () => { speedValue.textContent = `${Number(speedControl.value).toFixed(1)}倍`; });
@@ -217,7 +246,9 @@ document.getElementById('cameraMode').addEventListener('click', (event) => {
   firstPersonView = !firstPersonView;
   event.currentTarget.textContent = firstPersonView ? '三人称視点' : '一人称視点';
 });
+// フレーム間の経過時間を測り、動きを画面更新頻度に左右されにくくします。
 const clock = new THREE.Clock();
+// 2台の車の向きを考慮し、矩形の車体が接触しているか判定します。
 function carsOverlap(a, b) {
   // 車体の長方形同士を、各車の向きに沿った軸で判定します。
   const halfWidth = 450;
@@ -240,6 +271,7 @@ function carsOverlap(a, b) {
   }
   return true;
 }
+// 毎フレーム呼び出され、交通・衝突・操作・カメラを更新して描画します。
 function draw() {
   requestAnimationFrame(draw);
     const dt = Math.min(clock.getDelta(), 0.05);
@@ -307,6 +339,7 @@ function draw() {
 }
 draw();
 
+// ウィンドウサイズ変更時にカメラと描画領域の比率を更新します。
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
