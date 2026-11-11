@@ -30,7 +30,7 @@
 </head>
 <body>
 <!-- キー操作の簡単な案内です。 -->
-<div id="help">↓ 前進　↑ 後退　← → ハンドル（左右反転）</div>
+<div id="help">↑ 前進　↓ 減速・後退　← → ハンドル</div>
 <!-- 速度倍率、カメラ視点、横切る車の出現間隔を調整するUIです。 -->
 <div id="controls">
   <div class="controlRow">
@@ -127,14 +127,14 @@ const headlightBulbs = [];
 const headlightSpots = [];
 for (const x of [-300, 300]) {
   const bulb = new THREE.Mesh(new THREE.BoxGeometry(180, 100, 28), new THREE.MeshStandardMaterial({ color: 0xfff1b0, emissive: 0x000000 }));
-  bulb.position.set(x, 75, -1008);
+  bulb.position.set(x, 75, 1008);
   car.add(bulb);
   headlightBulbs.push(bulb);
   const target = new THREE.Object3D();
-  target.position.set(x, 40, -6500);
+  target.position.set(x, 40, 6500);
   car.add(target);
   const spot = new THREE.SpotLight(0xfff1c2, 0, 9000, Math.PI / 7, 0.35, 1.2);
-  spot.position.set(x, 65, -990);
+  spot.position.set(x, 65, 990);
   spot.target = target;
   car.add(spot);
   headlightSpots.push(spot);
@@ -142,7 +142,7 @@ for (const x of [-300, 300]) {
 const rearLamps = [];
 for (const x of [-300, 300]) {
   const lamp = new THREE.Mesh(new THREE.BoxGeometry(180, 110, 30), new THREE.MeshStandardMaterial({ color: 0x4d0808, emissive: 0x000000 }));
-  lamp.position.set(x, 75, 1008);
+  lamp.position.set(x, 75, -1008);
   car.add(lamp);
   rearLamps.push(lamp);
 }
@@ -207,8 +207,8 @@ function addDirectionMark(label, x, z) {
   car.add(mark);
 }
 addDirectionMark('N', 0, 1450);
-addDirectionMark('E', 850, 0);
-addDirectionMark('W', -850, 0);
+addDirectionMark('E', -850, 0);
+addDirectionMark('W', 850, 0);
 addDirectionMark('S', 0, -1450);
 
 // 約3.5秒ごとに交差点を横切る車。操作車と同じ寸法です。
@@ -365,8 +365,8 @@ function draw() {
     }
   }
 
-  // ↑キーで減速している間は後部のブレーキランプを赤く点灯します。
-  const braking = keys.ArrowUp && speed > 0;
+  // ↓キーで前進中に減速している間は後部のブレーキランプを赤く点灯します。
+  const braking = keys.ArrowDown && speed > 0;
   for (const lamp of rearLamps) {
     lamp.material.emissive.setHex(braking ? 0xff0000 : 0x000000);
     lamp.material.color.setHex(braking ? 0xff2525 : 0x4d0808);
@@ -380,23 +380,23 @@ function draw() {
       lamp.material.color.setHex(on ? 0xffb21c : 0x5a3200);
     }
   }
-  // 前後のキー操作を反転します。
+  // ↑キーでNマーク方向へ前進し、↓キーで減速して停止後は後退します。
   const speedMultiplier = Number(speedControl.value);
   const maxSpeed = 2600 * speedMultiplier;
-  if (keys.ArrowDown) speed = Math.min(speed + 900 * speedMultiplier * dt, maxSpeed);
-  else if (keys.ArrowUp) speed = Math.max(speed - 1100 * speedMultiplier * dt, -1000 * speedMultiplier);
+  if (keys.ArrowUp) speed = Math.min(speed + 900 * speedMultiplier * dt, maxSpeed);
+  else if (keys.ArrowDown) speed = Math.max(speed - 1100 * speedMultiplier * dt, -1000 * speedMultiplier);
   else speed *= Math.pow(0.985, dt * 60);
-  const steering = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
+  const steering = (keys.ArrowLeft ? 1 : 0) - (keys.ArrowRight ? 1 : 0);
   if (steering !== 0) {
     const turnAmount = steering * 0.9 * dt * (Math.abs(speed) > 5 ? Math.sign(speed) : 1);
-    movementYaw -= turnAmount;
+    movementYaw += turnAmount;
     car.rotation.y += turnAmount;
   }
   if (Math.abs(speed) > 5) {
 
 
         car.position.x += Math.sin(movementYaw) * speed * dt;
-    car.position.z -= Math.cos(movementYaw) * speed * dt;
+    car.position.z += Math.cos(movementYaw) * speed * dt;
     for (const wheel of wheels) wheel.rotation.x += speed * dt / 180;
   }
 
