@@ -48,9 +48,8 @@
     <span>ライト</span><button id="headlightButton" type="button" aria-pressed="false">前照灯 OFF</button><button id="leftSignalButton" type="button" aria-pressed="false">← 左ウィンカー</button><button id="rightSignalButton" type="button" aria-pressed="false">右ウィンカー →</button>
   </div>
   <div class="controlRow">
-    <label for="trafficInterval">後ろから来る車の間隔</label>
-    <input id="trafficInterval" type="range" min="1" max="10" step="0.5" value="5">
-    <span id="trafficIntervalValue">5.0秒</span>
+    <span>他の車</span>
+    <button id="spawnTrafficButton" type="button">車を発生</button>
   </div>
 </div>
 <script>
@@ -101,10 +100,10 @@ for (let z = -24000; z <= 24000; z += 1800) roadMark(35, 8, 900, 0, -266, z);
 // プレイヤーが操作する車を複数の部品で組み立てる親グループです。
 const car = new THREE.Group();
 scene.add(car);
-car.position.set(-700, 0, 6000);
+car.position.set(-700, 0, 22000);
 // Nマークが車の前に来るよう、車体とマークを一緒に180度回転します。
 car.rotation.y = Math.PI;
-// 車は直線道路のZプラス側からスタートします。
+// 操作車は直線道路の端からスタートし、前方に他の車が出現します。
 // 車体、屋根、タイヤを作成し、親グループにまとめます。
 const body = new THREE.Mesh(new THREE.BoxGeometry(900, 400, 2000), new THREE.MeshStandardMaterial({ color: 0xe74732, roughness: 0.55 }));
 body.position.y = -20;
@@ -200,14 +199,10 @@ addDirectionMark('E', -850, 0);
 addDirectionMark('W', 850, 0);
 addDirectionMark('S', 0, -1450);
 
-// 一定間隔で道路端に現れ、道路を端から端まで走る車です。
+// ボタンを押すと道路端に現れ、道路を端から端まで走る車です。
 // 道路端から端まで走る車と、出現タイマー・衝突エフェクトを管理します。
 const traffic = [];
-let trafficTimer = 5;
 const explosions = [];
-const trafficInterval = document.getElementById('trafficInterval');
-const trafficIntervalValue = document.getElementById('trafficIntervalValue');
-trafficInterval.addEventListener('input', () => { trafficIntervalValue.textContent = `${Number(trafficInterval.value).toFixed(1)}秒`; });
 // 対向交通の車をランダムな色で作り、道路上に出現させます。
 function makeTrafficCar() {
   const vehicle = new THREE.Group();
@@ -228,7 +223,7 @@ function makeTrafficCar() {
     }
   }
   // +X方向へ進む車は、進行方向に対して左側（道路の-Z側）を走ります。
-  vehicle.position.set(-900, 0, 24000);
+  vehicle.position.set(-900, 0, 16000);
   vehicle.rotation.y = Math.PI;
   // 交通車にも前照灯と赤い後部灯を付けます。車はローカル+Z方向へ進みます。
   for (const x of [-300, 300]) {
@@ -249,6 +244,7 @@ function makeTrafficCar() {
   scene.add(vehicle);
   traffic.push(vehicle);
 }
+document.getElementById('spawnTrafficButton').addEventListener('click', makeTrafficCar);
 
 // 衝突位置に粒子を発生させる爆発表現を作ります。
 function explodeAt(position) {
@@ -345,8 +341,6 @@ function carsOverlap(a, b) {
 function draw() {
   requestAnimationFrame(draw);
     const dt = Math.min(clock.getDelta(), 0.05);
-  trafficTimer -= dt;
-  if (trafficTimer <= 0) { makeTrafficCar(); trafficTimer = Number(trafficInterval.value); }
     for (let i = traffic.length - 1; i >= 0; i--) {
     const vehicle = traffic[i];
     vehicle.position.z -= 1500 * dt;
