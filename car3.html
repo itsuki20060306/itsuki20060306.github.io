@@ -30,7 +30,7 @@
 </head>
 <body>
 <!-- キー操作の簡単な案内です。 -->
-<div id="help">↑ 前進　↓ 減速・後退　← → ハンドル</div>
+<div id="help">↑ 前進　↓ 減速・後退　Q ブレーキ　← → ハンドル</div>
 <!-- 速度倍率、カメラ視点、横切る車の出現間隔を調整するUIです。 -->
 <div id="controls">
   <div class="controlRow">
@@ -266,8 +266,9 @@ const keys = Object.create(null);
 window.addEventListener('keydown', (event) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) event.preventDefault();
   keys[event.key] = true;
+  keys[event.code] = true;
 });
-window.addEventListener('keyup', (event) => { keys[event.key] = false; });
+window.addEventListener('keyup', (event) => { keys[event.key] = false; keys[event.code] = false; });
 window.addEventListener('blur', () => { for (const key in keys) keys[key] = false; });
 
 // 車速・車の進行向き・カメラ向き・一人称視点の状態を保持します。
@@ -365,8 +366,8 @@ function draw() {
     }
   }
 
-  // ↓キーで前進中に減速している間は後部のブレーキランプを赤く点灯します。
-  const braking = keys.ArrowDown && speed > 0;
+  // Qキーを押している間は前後進を問わず、↓キーで前進を減速する間もブレーキランプを点灯します。
+  const braking = keys.KeyQ || (keys.ArrowDown && speed > 0);
   for (const lamp of rearLamps) {
     lamp.material.emissive.setHex(braking ? 0xff0000 : 0x000000);
     lamp.material.color.setHex(braking ? 0xff2525 : 0x4d0808);
@@ -383,7 +384,8 @@ function draw() {
   // ↑キーでNマーク方向へ前進し、↓キーで減速して停止後は後退します。
   const speedMultiplier = Number(speedControl.value);
   const maxSpeed = 2600 * speedMultiplier;
-  if (keys.ArrowUp) speed = Math.min(speed + 900 * speedMultiplier * dt, maxSpeed);
+  if (keys.ArrowUp && !keys.KeyQ) speed = Math.min(speed + 900 * speedMultiplier * dt, maxSpeed);
+  else if (keys.KeyQ) speed = Math.abs(speed) < 1100 * speedMultiplier * dt ? 0 : speed - Math.sign(speed) * 1100 * speedMultiplier * dt;
   else if (keys.ArrowDown) speed = Math.max(speed - 1100 * speedMultiplier * dt, -1000 * speedMultiplier);
   else speed *= Math.pow(0.985, dt * 60);
   const steering = (keys.ArrowLeft ? 1 : 0) - (keys.ArrowRight ? 1 : 0);
