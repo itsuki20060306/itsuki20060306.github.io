@@ -148,7 +148,7 @@ for (const x of [-300, 300]) {
 }
 const signalLamps = { left: [], right: [] };
 for (const x of [-390, 390]) {
-  const side = x < 0 ? 'left' : 'right';
+  const side = x < 0 ? 'right' : 'left';
   for (const z of [-1005, 1005]) {
     const lamp = new THREE.Mesh(new THREE.BoxGeometry(95, 90, 32), new THREE.MeshStandardMaterial({ color: 0x5a3200, emissive: 0x000000 }));
     lamp.position.set(x, 95, z);
@@ -241,6 +241,22 @@ function makeTrafficCar() {
   // +X方向へ進む車は、進行方向に対して左側（道路の-Z側）を走ります。
   vehicle.position.set(-7000, 0, -700);
   vehicle.rotation.y = Math.PI / 2;
+  // 交通車にも前照灯と赤い後部灯を付けます。車はローカル+Z方向へ進みます。
+  for (const x of [-300, 300]) {
+    const headlamp = new THREE.Mesh(new THREE.BoxGeometry(180, 100, 28), new THREE.MeshStandardMaterial({ color: 0xfff1b0, emissive: 0xffd966, emissiveIntensity: 1.4 }));
+    headlamp.position.set(x, 75, 1008);
+    vehicle.add(headlamp);
+    const tailLamp = new THREE.Mesh(new THREE.BoxGeometry(180, 110, 30), new THREE.MeshStandardMaterial({ color: 0xd91616, emissive: 0x7a0000, emissiveIntensity: 0.8 }));
+    tailLamp.position.set(x, 75, -1008);
+    vehicle.add(tailLamp);
+    const target = new THREE.Object3D();
+    target.position.set(x, 35, 6500);
+    vehicle.add(target);
+    const headlight = new THREE.SpotLight(0xfff0c2, 5, 8000, Math.PI / 7, 0.4, 1.2);
+    headlight.position.set(x, 60, 990);
+    headlight.target = target;
+    vehicle.add(headlight);
+  }
   scene.add(vehicle);
   traffic.push(vehicle);
 }
