@@ -51,6 +51,15 @@
     <span>時間帯</span><button id="timeOfDayButton" type="button" aria-pressed="false">夜にする</button>
   </div>
   <div class="controlRow">
+    <label for="trafficType">種類</label><select id="trafficType"><option value="car">普通</option><option value="truck">トラック</option><option value="bike">バイク</option><option value="segway">セグウェイ</option></select>
+  </div>
+  <div class="controlRow">
+    <label for="trafficSize">大きさ</label><input id="trafficSize" type="range" min="0.6" max="1.6" step="0.1" value="1"><span id="trafficSizeValue">1.0倍</span>
+  </div>
+  <div class="controlRow">
+    <label for="trafficSpeed">速度</label><input id="trafficSpeed" type="range" min="500" max="3000" step="100" value="1500"><span id="trafficSpeedValue">1500</span>
+  </div>
+  <div class="controlRow">
     <span>他の車</span>
     <button id="spawnTrafficButton" type="button">車を発生</button>
   </div>
@@ -210,38 +219,63 @@ const explosions = [];
 // 対向交通の車をランダムな色で作り、道路上に出現させます。
 function makeTrafficCar() {
   const vehicle = new THREE.Group();
-  const color = [0x2878c7, 0xf4c542, 0xeeeeee, 0x38a06c][Math.floor(Math.random() * 4)];
-  const shell = new THREE.Mesh(new THREE.BoxGeometry(900, 400, 2000), new THREE.MeshStandardMaterial({ color, roughness: 0.55 }));
+  const kind = document.getElementById('trafficType').value;
+  const size = Number(document.getElementById('trafficSize').value);
+  const speed = Number(document.getElementById('trafficSpeed').value);
+  const configs = {
+    car: { width: 900, height: 400, length: 2000, wheelX: 520, wheelZ: [-620, 650], cabin: true },
+    truck: { width: 1050, height: 550, length: 3000, wheelX: 600, wheelZ: [-1050, 1050], cabin: true },
+    bike: { width: 300, height: 420, length: 1100, wheelX: 0, wheelZ: [-380, 380], cabin: false },
+    segway: { width: 420, height: 380, length: 650, wheelX: 0, wheelZ: [-180, 180], cabin: false }
+  };
+  const cfg = configs[kind];
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(cfg.width, cfg.height, cfg.length), new THREE.MeshStandardMaterial({ color: [0x2878c7, 0xf4c542, 0xeeeeee, 0x38a06c][Math.floor(Math.random() * 4)], roughness: 0.55 }));
   shell.position.y = -20;
   shell.castShadow = true;
   vehicle.add(shell);
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(760, 330, 1050), new THREE.MeshStandardMaterial({ color: 0x383a3d, roughness: 0.65 }));
-  cabin.position.set(0, 345, -120);
-  vehicle.add(cabin);
-  for (const x of [-520, 520]) {
-    for (const z of [-620, 650]) {
-      const tire = new THREE.Mesh(new THREE.CylinderGeometry(180, 180, 130, 32), tireMaterial);
-          tire.rotation.z = Math.PI / 2;
-      tire.position.set(x, -130, z);
-      vehicle.add(tire);
+  if (cfg.cabin) {
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(cfg.width * 0.84, cfg.height * 0.82, cfg.length * 0.52), new THREE.MeshStandardMaterial({ color: 0x383a3d, roughness: 0.65 }));
+    cabin.position.set(0, cfg.height * 0.82, -cfg.length * 0.06);
+    vehicle.add(cabin);
+    if (kind === 'truck') {
+      const cargo = new THREE.Mesh(new THREE.BoxGeometry(cfg.width * 0.92, 850, cfg.length * 0.58), new THREE.MeshStandardMaterial({ color: 0xb9bdc2, roughness: 0.8 }));
+      cargo.position.set(0, 600, -cfg.length * 0.18);
+      cargo.castShadow = true;
+      vehicle.add(cargo);
+    }
+  } else {
+    const rider = new THREE.Mesh(new THREE.BoxGeometry(cfg.width * 0.45, cfg.height * 0.75, 300), new THREE.MeshStandardMaterial({ color: 0x26384a, roughness: 0.8 }));
+    rider.position.set(0, 260, 0);
+    vehicle.add(rider);
+  }
+  for (const z of cfg.wheelZ) {
+    for (const side of (cfg.wheelX ? [-1, 1] : [0])) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(kind === 'segway' ? 150 : 180, kind === 'segway' ? 150 : 180, 130, 24), tireMaterial);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(side * cfg.wheelX, -cfg.height * 0.28, z);
+      vehicle.add(wheel);
     }
   }
-  // +X方向へ進む車は、進行方向に対して左側（道路の-Z側）を走ります。
+  vehicle.scale.setScalar(size);
+  vehicle.userData.travelSpeed = speed * (kind === 'segway' ? 0.35 : 1);
+  vehicle.userData.laneChangeRate = kind === 'truck' ? 1 : kind === 'bike' ? 6 : kind === 'segway' ? 0.8 : 3;
+  vehicle.userData.kind = kind;
   vehicle.position.set(car.position.x < 0 ? -900 : 900, 0, 16000);
   vehicle.rotation.y = Math.PI;
-  // 交通車にも前照灯と赤い後部灯を付けます。車はローカル+Z方向へ進みます。
-  for (const x of [-300, 300]) {
-    const headlamp = new THREE.Mesh(new THREE.BoxGeometry(180, 100, 28), new THREE.MeshStandardMaterial({ color: 0xfff1b0, emissive: 0xffd966, emissiveIntensity: 1.4 }));
-    headlamp.position.set(x, 75, 1008);
+  const lightOffsets = kind === 'bike' || kind === 'segway' ? [0] : [-cfg.width * 0.3, cfg.width * 0.3];
+  for (const x of lightOffsets) {
+    const lampSize = kind === 'segway' ? 85 : 150;
+    const headlamp = new THREE.Mesh(new THREE.BoxGeometry(lampSize, 90, 28), new THREE.MeshStandardMaterial({ color: 0xfff1b0, emissive: 0xffd966, emissiveIntensity: 1.4 }));
+    headlamp.position.set(x, 75, cfg.length / 2 + 8);
     vehicle.add(headlamp);
-    const tailLamp = new THREE.Mesh(new THREE.BoxGeometry(180, 110, 30), new THREE.MeshStandardMaterial({ color: 0xd91616, emissive: 0x7a0000, emissiveIntensity: 0.8 }));
-    tailLamp.position.set(x, 75, -1008);
+    const tailLamp = new THREE.Mesh(new THREE.BoxGeometry(lampSize, 90, 30), new THREE.MeshStandardMaterial({ color: 0xd91616, emissive: 0x7a0000, emissiveIntensity: 0.8 }));
+    tailLamp.position.set(x, 75, -cfg.length / 2 - 8);
     vehicle.add(tailLamp);
     const target = new THREE.Object3D();
     target.position.set(x, 35, 6500);
     vehicle.add(target);
     const headlight = new THREE.SpotLight(0xfff0c2, 5, 8000, Math.PI / 7, 0.4, 1.2);
-    headlight.position.set(x, 60, 990);
+    headlight.position.set(x, 60, cfg.length / 2);
     headlight.target = target;
     vehicle.add(headlight);
   }
@@ -249,6 +283,14 @@ function makeTrafficCar() {
   traffic.push(vehicle);
 }
 document.getElementById('spawnTrafficButton').addEventListener('click', makeTrafficCar);
+
+const trafficSize = document.getElementById('trafficSize');
+
+const trafficSpeed = document.getElementById('trafficSpeed');
+
+trafficSize.addEventListener('input', () => document.getElementById('trafficSizeValue').textContent = Number(trafficSize.value).toFixed(1) + '倍');
+
+trafficSpeed.addEventListener('input', () => document.getElementById('trafficSpeedValue').textContent = trafficSpeed.value);
 
 // 衝突位置に粒子を発生させる爆発表現を作ります。
 function explodeAt(position) {
@@ -333,28 +375,30 @@ rightSignalButton.addEventListener('click', () => setSignal('right'));
 const clock = new THREE.Clock();
 // 2台の車の向きを考慮し、矩形の車体が接触しているか判定します。
 function carsOverlap(a, b) {
-  // 車体の長方形同士を、各車の向きに沿った軸で判定します。
-  const halfWidth = 450;
-  const halfLength = 1000;
   const axes = [];
   for (const vehicle of [a, b]) {
     const yaw = vehicle.rotation.y;
     axes.push({ x: Math.cos(yaw), z: -Math.sin(yaw) });
     axes.push({ x: Math.sin(yaw), z: Math.cos(yaw) });
   }
+  const dimensions = (vehicle) => {
+    const kind = vehicle.userData.kind || 'player';
+    const width = kind === 'truck' ? 525 : kind === 'bike' ? 180 : kind === 'segway' ? 230 : 450;
+    const length = kind === 'truck' ? 1500 : kind === 'bike' ? 600 : kind === 'segway' ? 400 : 1000;
+    return { width: width * vehicle.scale.x, length: length * vehicle.scale.z };
+  };
+  const sizeA = dimensions(a);
+  const sizeB = dimensions(b);
   const dx = b.position.x - a.position.x;
   const dz = b.position.z - a.position.z;
   for (const axis of axes) {
     const distance = Math.abs(dx * axis.x + dz * axis.z);
-    const radiusA = Math.abs((Math.cos(a.rotation.y) * axis.x - Math.sin(a.rotation.y) * axis.z)) * halfWidth
-      + Math.abs((Math.sin(a.rotation.y) * axis.x + Math.cos(a.rotation.y) * axis.z)) * halfLength;
-    const radiusB = Math.abs((Math.cos(b.rotation.y) * axis.x - Math.sin(b.rotation.y) * axis.z)) * halfWidth
-      + Math.abs((Math.sin(b.rotation.y) * axis.x + Math.cos(b.rotation.y) * axis.z)) * halfLength;
-    if (distance > radiusA + radiusB) return false;
+    const projection = (vehicle, size) => Math.abs(Math.cos(vehicle.rotation.y) * axis.x - Math.sin(vehicle.rotation.y) * axis.z) * size.width
+      + Math.abs(Math.sin(vehicle.rotation.y) * axis.x + Math.cos(vehicle.rotation.y) * axis.z) * size.length;
+    if (distance > projection(a, sizeA) + projection(b, sizeB)) return false;
   }
   return true;
-}
-// 毎フレーム呼び出され、交通・衝突・操作・カメラを更新して描画します。
+}// 毎フレーム呼び出され、交通・衝突・操作・カメラを更新して描画します。
 function draw() {
   requestAnimationFrame(draw);
     const dt = Math.min(clock.getDelta(), 0.05);
@@ -362,8 +406,8 @@ function draw() {
     const vehicle = traffic[i];
     // 操作車の左右車線に合わせて、対向車も滑らかに車線を移ります。
     const targetLaneX = car.position.x < 0 ? -900 : 900;
-    vehicle.position.x += (targetLaneX - vehicle.position.x) * Math.min(1, dt * 3);
-    vehicle.position.z -= 1500 * dt;
+    vehicle.position.x += (targetLaneX - vehicle.position.x) * Math.min(1, dt * vehicle.userData.laneChangeRate);
+    vehicle.position.z -= vehicle.userData.travelSpeed * dt;
     if (carsOverlap(car, vehicle)) {
       explodeAt(new THREE.Vector3((vehicle.position.x + car.position.x) / 2, 180, (vehicle.position.z + car.position.z) / 2));
       scene.remove(vehicle);
