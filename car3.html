@@ -145,7 +145,7 @@ for (const x of [-390, 390]) {
   }
 }
 
-const roof = new THREE.Mesh(new THREE.BoxGeometry(760, 330, 1050), new THREE.MeshStandardMaterial({ color: 0xbfe4ed, roughness: 0.3, metalness: 0.15 }));
+const roof = new THREE.Mesh(new THREE.BoxGeometry(760, 330, 1050), new THREE.MeshStandardMaterial({ color: 0x383a3d, roughness: 0.65, metalness: 0 }));
 roof.position.set(0, 345, -120);
 roof.castShadow = true;
 car.add(roof);
@@ -211,7 +211,7 @@ function makeTrafficCar() {
   shell.position.y = -20;
   shell.castShadow = true;
   vehicle.add(shell);
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(760, 330, 1050), new THREE.MeshStandardMaterial({ color: 0xa9d6e5, roughness: 0.3 }));
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(760, 330, 1050), new THREE.MeshStandardMaterial({ color: 0x383a3d, roughness: 0.65 }));
   cabin.position.set(0, 345, -120);
   vehicle.add(cabin);
   for (const x of [-520, 520]) {
@@ -406,7 +406,7 @@ function draw() {
 
   // カメラの向きは車のハンドル操作から独立。ボタンで90度ずつ切り替えます。
   if (firstPersonView) {
-    const cameraPosition = car.localToWorld(new THREE.Vector3(0, 590, 430));
+    const cameraPosition = car.localToWorld(new THREE.Vector3(-180, 590, 430));
     const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(car.quaternion);
     camera.position.copy(cameraPosition);
     camera.lookAt(cameraPosition.clone().addScaledVector(forward, 5000));
