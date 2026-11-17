@@ -48,6 +48,9 @@
     <span>ライト</span><button id="headlightButton" type="button" aria-pressed="false">前照灯 OFF</button><button id="leftSignalButton" type="button" aria-pressed="false">← 左ウィンカー</button><button id="rightSignalButton" type="button" aria-pressed="false">右ウィンカー →</button>
   </div>
   <div class="controlRow">
+    <span>時間帯</span><button id="timeOfDayButton" type="button" aria-pressed="false">夜にする</button>
+  </div>
+  <div class="controlRow">
     <span>他の車</span>
     <button id="spawnTrafficButton" type="button">車を発生</button>
   </div>
@@ -67,7 +70,8 @@ renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 // 空と地面からの環境光、および影を作る太陽光を追加します。
-scene.add(new THREE.HemisphereLight(0xffffff, 0x64745a, 2));
+const ambientLight = new THREE.HemisphereLight(0xffffff, 0x64745a, 2);
+scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 2);
 sun.position.set(-3000, 6000, 4000);
 sun.castShadow = true;
@@ -289,9 +293,11 @@ document.getElementById('cameraMode').addEventListener('click', (event) => {
 });
 // フレーム間の経過時間を測り、動きを画面更新頻度に左右されにくくします。
 let headlightsOn = false;
+let nightMode = false;
 let activeSignal = null;
 let signalElapsed = 0;
 const headlightButton = document.getElementById('headlightButton');
+const timeOfDayButton = document.getElementById('timeOfDayButton');
 const leftSignalButton = document.getElementById('leftSignalButton');
 const rightSignalButton = document.getElementById('rightSignalButton');
 function setSignal(side) {
@@ -302,6 +308,17 @@ function setSignal(side) {
     button.setAttribute('aria-pressed', String(isActive));
   }
 }
+timeOfDayButton.addEventListener('click', () => {
+  nightMode = !nightMode;
+  const skyColor = nightMode ? 0x081426 : 0xb9d9ef;
+  scene.background.setHex(skyColor);
+  scene.fog.color.setHex(skyColor);
+  ambientLight.intensity = nightMode ? 0.3 : 2;
+  sun.intensity = nightMode ? 0.15 : 2;
+  timeOfDayButton.textContent = nightMode ? '昼にする' : '夜にする';
+  timeOfDayButton.classList.toggle('active', nightMode);
+  timeOfDayButton.setAttribute('aria-pressed', String(nightMode));
+});
 headlightButton.addEventListener('click', () => {
   headlightsOn = !headlightsOn;
   headlightButton.textContent = headlightsOn ? '前照灯 ON' : '前照灯 OFF';
