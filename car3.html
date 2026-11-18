@@ -95,7 +95,7 @@ scene.add(ground);
 
 // 直線道路：前後に長く続く一本道です。
 const asphalt = new THREE.MeshStandardMaterial({ color: 0x34383d, roughness: 0.95 });
-const roadAlongZ = new THREE.Mesh(new THREE.BoxGeometry(3600, 26, 50000), asphalt);
+const roadAlongZ = new THREE.Mesh(new THREE.BoxGeometry(5000, 26, 50000), asphalt);
 roadAlongZ.position.y = -284;
 roadAlongZ.receiveShadow = true;
 scene.add(roadAlongZ);
@@ -109,11 +109,13 @@ function roadMark(w, h, d, x, y, z, material = paint) {
 // 直線道路の中央に破線を引きます。交差点の標示はありません。
 for (let z = -24000; z <= 24000; z += 1800) roadMark(35, 8, 900, 0, -266, z);
 
+
 // 操作する車
 // プレイヤーが操作する車を複数の部品で組み立てる親グループです。
 const car = new THREE.Group();
 scene.add(car);
-car.position.set(-700, 0, 22000);
+car.position.set(-1100, 0, 22000);
+car.scale.setScalar(1.7);
 // Nマークが車の前に来るよう、車体とマークを一緒に180度回転します。
 car.rotation.y = Math.PI;
 // 操作車は直線道路の端からスタートし、前方に他の車が出現します。
@@ -204,7 +206,7 @@ function addDirectionMark(label, x, z) {
   const texture = new THREE.CanvasTexture(canvas);
   const mark = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
   mark.position.set(x, 780, z);
-  mark.scale.set(360, 360, 1);
+  mark.scale.set(240, 240, 1);
   car.add(mark);
 }
 addDirectionMark('N', 0, 1450);
@@ -277,11 +279,11 @@ function makeTrafficCar() {
       vehicle.add(wheel);
     }
   }
-  vehicle.scale.setScalar(size);
+  vehicle.scale.setScalar(size * (kind === 'bicycle' ? 1 : 1.7));
   vehicle.userData.travelSpeed = speed;
   vehicle.userData.laneChangeRate = kind === 'truck' ? 1 : kind === 'bicycle' ? 4 : 3;
   vehicle.userData.kind = kind;
-  vehicle.position.set(kind === 'bicycle' ? -1500 : (car.position.x < 0 ? -900 : 900), 0, 16000);
+  vehicle.position.set(car.position.x < 0 ? -1000 : 600, 0, 16000);
   vehicle.rotation.y = Math.PI;
   const lightOffsets = kind === 'bicycle' ? [0] : [-cfg.width * 0.3, cfg.width * 0.3];
   for (const x of lightOffsets) {
@@ -426,7 +428,7 @@ function draw() {
     for (let i = traffic.length - 1; i >= 0; i--) {
     const vehicle = traffic[i];
     // 操作車の左右車線に合わせて、対向車も滑らかに車線を移ります。
-    const targetLaneX = vehicle.userData.kind === 'bicycle' ? -1500 : (car.position.x < 0 ? -900 : 900);
+    const targetLaneX = car.position.x < 0 ? -1000 : 600;
     vehicle.position.x += (targetLaneX - vehicle.position.x) * Math.min(1, dt * vehicle.userData.laneChangeRate);
     vehicle.position.z -= vehicle.userData.travelSpeed * dt;
     if (carsOverlap(car, vehicle)) {
