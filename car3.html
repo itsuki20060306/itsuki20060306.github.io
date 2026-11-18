@@ -51,7 +51,7 @@
     <span>時間帯</span><button id="timeOfDayButton" type="button" aria-pressed="false">夜にする</button>
   </div>
   <div class="controlRow">
-    <label for="trafficType">種類</label><select id="trafficType"><option value="car">普通</option><option value="truck">トラック</option><option value="bike">バイク</option><option value="segway">セグウェイ</option></select>
+    <label for="trafficType">種類</label><select id="trafficType"><option value="car">普通</option><option value="truck">トラック</option><option value="bicycle">自転車</option></select>
   </div>
   <div class="controlRow">
     <label for="trafficSize">大きさ</label><input id="trafficSize" type="range" min="0.6" max="1.6" step="0.1" value="1"><span id="trafficSizeValue">1.0倍</span>
@@ -225,14 +225,15 @@ function makeTrafficCar() {
   const configs = {
     car: { width: 900, height: 400, length: 2000, wheelX: 520, wheelZ: [-620, 650], cabin: true },
     truck: { width: 1050, height: 550, length: 3000, wheelX: 600, wheelZ: [-1050, 1050], cabin: true },
-    bike: { width: 300, height: 420, length: 1100, wheelX: 0, wheelZ: [-380, 380], cabin: false },
-    segway: { width: 420, height: 380, length: 650, wheelX: 0, wheelZ: [-180, 180], cabin: false }
+    bicycle: { width: 180, height: 1500, length: 1500, wheelX: 0, wheelZ: [-520, 520], cabin: false }
   };
   const cfg = configs[kind];
-  const shell = new THREE.Mesh(new THREE.BoxGeometry(cfg.width, cfg.height, cfg.length), new THREE.MeshStandardMaterial({ color: [0x2878c7, 0xf4c542, 0xeeeeee, 0x38a06c][Math.floor(Math.random() * 4)], roughness: 0.55 }));
-  shell.position.y = -20;
-  shell.castShadow = true;
-  vehicle.add(shell);
+  if (kind !== 'bicycle') {
+    const shell = new THREE.Mesh(new THREE.BoxGeometry(cfg.width, cfg.height, cfg.length), new THREE.MeshStandardMaterial({ color: [0x2878c7, 0xf4c542, 0xeeeeee, 0x38a06c][Math.floor(Math.random() * 4)], roughness: 0.55 }));
+    shell.position.y = -20;
+    shell.castShadow = true;
+    vehicle.add(shell);
+  }
   if (cfg.cabin) {
     const cabin = new THREE.Mesh(new THREE.BoxGeometry(cfg.width * 0.84, cfg.height * 0.82, cfg.length * 0.52), new THREE.MeshStandardMaterial({ color: 0x383a3d, roughness: 0.65 }));
     cabin.position.set(0, cfg.height * 0.82, -cfg.length * 0.06);
@@ -243,28 +244,48 @@ function makeTrafficCar() {
       cargo.castShadow = true;
       vehicle.add(cargo);
     }
-  } else {
-    const rider = new THREE.Mesh(new THREE.BoxGeometry(cfg.width * 0.45, cfg.height * 0.75, 300), new THREE.MeshStandardMaterial({ color: 0x26384a, roughness: 0.8 }));
-    rider.position.set(0, 260, 0);
-    vehicle.add(rider);
+  } else if (kind === 'bicycle') {
+    // 自転車の細い二輪を前後に配置し、フレームと人型の乗り手を組み立てます。
+    const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x202124, roughness: 0.9 });
+    for (const z of cfg.wheelZ) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(340, 340, 42, 32), wheelMaterial);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(0, 40, z);
+      vehicle.add(wheel);
+    }
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xd9382b, roughness: 0.55 });
+    const addBar = (a, b, radius = 24) => {
+      const start = new THREE.Vector3(...a), end = new THREE.Vector3(...b);
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, start.distanceTo(end), 12), frameMat);
+      bar.position.copy(start).add(end).multiplyScalar(0.5);
+      bar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), end.sub(start).normalize());
+      vehicle.add(bar);
+    };
+    addBar([0, 40, -520], [0, 520, -100]); addBar([0, 520, -100], [0, 40, 520]);
+    addBar([0, 40, -520], [0, 40, 520]); addBar([0, 40, 520], [0, 520, -100]);
+    addBar([0, 520, -100], [0, 650, 180], 18);
+    const riderMat = new THREE.MeshStandardMaterial({ color: 0x26384a, roughness: 0.8 });
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(150, 420, 180), riderMat); torso.position.set(0, 850, -20); vehicle.add(torso);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(105, 16, 16), new THREE.MeshStandardMaterial({ color: 0xd8a47c })); head.position.set(0, 1160, 80); vehicle.add(head);
+    addBar([0, 740, 20], [0, 520, -100], 34); addBar([0, 740, 20], [0, 650, 180], 34);
   }
-  for (const z of cfg.wheelZ) {
+  for (const z of (kind === 'bicycle' ? [] : cfg.wheelZ)) {
     for (const side of (cfg.wheelX ? [-1, 1] : [0])) {
-      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(kind === 'segway' ? 150 : 180, kind === 'segway' ? 150 : 180, 130, 24), tireMaterial);
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(180, 180, 130, 24), tireMaterial);
       wheel.rotation.z = Math.PI / 2;
       wheel.position.set(side * cfg.wheelX, -cfg.height * 0.28, z);
       vehicle.add(wheel);
     }
   }
   vehicle.scale.setScalar(size);
-  vehicle.userData.travelSpeed = speed * (kind === 'segway' ? 0.35 : 1);
-  vehicle.userData.laneChangeRate = kind === 'truck' ? 1 : kind === 'bike' ? 6 : kind === 'segway' ? 0.8 : 3;
+  vehicle.userData.travelSpeed = speed;
+  vehicle.userData.laneChangeRate = kind === 'truck' ? 1 : kind === 'bicycle' ? 4 : 3;
   vehicle.userData.kind = kind;
-  vehicle.position.set(car.position.x < 0 ? -900 : 900, 0, 16000);
+  vehicle.position.set(kind === 'bicycle' ? -1500 : (car.position.x < 0 ? -900 : 900), 0, 16000);
   vehicle.rotation.y = Math.PI;
-  const lightOffsets = kind === 'bike' || kind === 'segway' ? [0] : [-cfg.width * 0.3, cfg.width * 0.3];
+  const lightOffsets = kind === 'bicycle' ? [0] : [-cfg.width * 0.3, cfg.width * 0.3];
   for (const x of lightOffsets) {
-    const lampSize = kind === 'segway' ? 85 : 150;
+    const lampSize = kind === 'bicycle' ? 70 : 150;
     const headlamp = new THREE.Mesh(new THREE.BoxGeometry(lampSize, 90, 28), new THREE.MeshStandardMaterial({ color: 0xfff1b0, emissive: 0xffd966, emissiveIntensity: 1.4 }));
     headlamp.position.set(x, 75, cfg.length / 2 + 8);
     vehicle.add(headlamp);
@@ -383,8 +404,8 @@ function carsOverlap(a, b) {
   }
   const dimensions = (vehicle) => {
     const kind = vehicle.userData.kind || 'player';
-    const width = kind === 'truck' ? 525 : kind === 'bike' ? 180 : kind === 'segway' ? 230 : 450;
-    const length = kind === 'truck' ? 1500 : kind === 'bike' ? 600 : kind === 'segway' ? 400 : 1000;
+    const width = kind === 'truck' ? 525 : kind === 'bicycle' ? 100 : 450;
+    const length = kind === 'truck' ? 1500 : kind === 'bicycle' ? 750 : 1000;
     return { width: width * vehicle.scale.x, length: length * vehicle.scale.z };
   };
   const sizeA = dimensions(a);
@@ -405,7 +426,7 @@ function draw() {
     for (let i = traffic.length - 1; i >= 0; i--) {
     const vehicle = traffic[i];
     // 操作車の左右車線に合わせて、対向車も滑らかに車線を移ります。
-    const targetLaneX = car.position.x < 0 ? -900 : 900;
+    const targetLaneX = vehicle.userData.kind === 'bicycle' ? -1500 : (car.position.x < 0 ? -900 : 900);
     vehicle.position.x += (targetLaneX - vehicle.position.x) * Math.min(1, dt * vehicle.userData.laneChangeRate);
     vehicle.position.z -= vehicle.userData.travelSpeed * dt;
     if (carsOverlap(car, vehicle)) {
