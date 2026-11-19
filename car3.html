@@ -48,6 +48,8 @@
       <input id="speedControl" type="range" min="0.5" max="3" step="0.5" value="2">
       <span id="speedValue">2.0倍</span>
     </div>
+    <div class="controlRow"><span>現在速度</span><strong id="currentSpeedValue">0 km/h</strong>
+    </div>
     <div class="controlRow">
       <span>ライト</span><button id="lowBeamButton" type="button" aria-pressed="false">ロービーム OFF</button><button id="highBeamButton" type="button" aria-pressed="false">ハイビーム OFF</button><button id="leftSignalButton" type="button" aria-pressed="false">← 左ウィンカー</button><button id="rightSignalButton" type="button" aria-pressed="false">右ウィンカー →</button>
     </div>
@@ -85,9 +87,9 @@
 // 3Dオブジェクトを配置する舞台です。
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xb9d9ef);
-scene.fog = new THREE.Fog(0xb9d9ef, 12000, 50000);
+scene.fog = new THREE.Fog(0xb9d9ef, 12000, 150000);
 // プレイヤーが見る視点。画角や描画距離もここで決めます。
-const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 1, 100000);
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 1, 250000);
 // WebGLで3Dを画面に描く装置を用意します。
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -104,15 +106,15 @@ sun.castShadow = true;
 scene.add(sun);
 
 // 道路の周囲に広がる地面です。
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(100000, 100000), new THREE.MeshStandardMaterial({ color: 0x668b4e, roughness: 1 }));
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(100000, 300000), new THREE.MeshStandardMaterial({ color: 0x668b4e, roughness: 1 }));
 ground.rotation.x = -Math.PI / 2;
-ground.position.y = -300;
+ground.position.y = -320;
 ground.receiveShadow = true;
 scene.add(ground);
 
 // 直線道路：前後に長く続く一本道です。
 const asphalt = new THREE.MeshStandardMaterial({ color: 0x34383d, roughness: 0.95 });
-const roadAlongZ = new THREE.Mesh(new THREE.BoxGeometry(5000, 20, 50000), asphalt);
+const roadAlongZ = new THREE.Mesh(new THREE.BoxGeometry(5000, 20, 200000), asphalt);
 roadAlongZ.position.y = -303;
 roadAlongZ.receiveShadow = true;
 scene.add(roadAlongZ);
@@ -124,7 +126,7 @@ function roadMark(w, h, d, x, y, z, material = paint) {
   scene.add(mark);
 }
 // 直線道路の中央に破線を引きます。交差点の標示はありません。
-for (let z = -24000; z <= 24000; z += 1800) roadMark(35, 8, 900, 0, -266, z);
+for (let z = -99000; z <= 99000; z += 1800) roadMark(35, 8, 900, 0, -266, z);
 
 
 // 操作する車
@@ -453,6 +455,7 @@ let firstPersonView = false;
 // UI部品を取得し、スライダーやボタンの操作をゲーム状態へ反映します。
 const speedControl = document.getElementById('speedControl');
 const speedValue = document.getElementById('speedValue');
+const currentSpeedValue = document.getElementById("currentSpeedValue");
 speedControl.addEventListener('input', () => { speedValue.textContent = `${Number(speedControl.value).toFixed(1)}倍`; });
 document.getElementById('cameraLeft').addEventListener('click', () => { cameraYaw += Math.PI / 2; });
 document.getElementById('cameraRight').addEventListener('click', () => { cameraYaw -= Math.PI / 2; });
@@ -551,7 +554,7 @@ function draw() {
       scene.remove(vehicle);
       traffic.splice(i, 1);
       speed *= 0.25;
-    } else if (vehicle.position.z < -26000) { scene.remove(vehicle); traffic.splice(i, 1); }
+    } else if (vehicle.position.z < -100000) { scene.remove(vehicle); traffic.splice(i, 1); }
   }
   for (let i = explosions.length - 1; i >= 0; i--) {
     const effect = explosions[i];
@@ -591,8 +594,9 @@ function draw() {
     if (elapsed >= macroDuration && macroPlaybackIndex >= macroEvents.length) stopMacroPlayback();
   }
   // ↑キーでNマーク方向へ前進し、↓キーで減速して停止後は後退します。
+  currentSpeedValue.textContent = `${Math.abs(speed * 0.0036).toFixed(1)} km/h`;
   const speedMultiplier = Number(speedControl.value);
-  const maxSpeed = 2600 * speedMultiplier;
+  const maxSpeed = 5555.56 * speedMultiplier;
   if (keys.ArrowUp && !keys.KeyQ) speed = Math.min(speed + 900 * speedMultiplier * dt, maxSpeed);
   else if (keys.KeyQ) speed = Math.abs(speed) < 1100 * speedMultiplier * dt ? 0 : speed - Math.sign(speed) * 1100 * speedMultiplier * dt;
   else if (keys.ArrowDown) speed = Math.max(speed - 1100 * speedMultiplier * dt, -1000 * speedMultiplier);
@@ -603,15 +607,27 @@ function draw() {
     movementYaw += turnAmount;
     car.rotation.y += turnAmount;
   }
-  const roadEdge = 2500;
+  const roadHalfWidth = 2500;
+  const roadHalfLength = 100000;
   const carHalfWidth = 900 * car.scale.x / 2;
-  const rightOverhang = Math.max(0, car.position.x + carHalfWidth - roadEdge);
-  const leftOverhang = Math.max(0, -roadEdge - (car.position.x - carHalfWidth));
-  const overhang = Math.max(rightOverhang, leftOverhang);
+  const carHalfLength = 2000 * car.scale.z / 2;
+  const yawCos = Math.abs(Math.cos(car.rotation.y));
+  const yawSin = Math.abs(Math.sin(car.rotation.y));
+  const extentX = yawCos * carHalfWidth + yawSin * carHalfLength;
+  const extentZ = yawCos * carHalfLength + yawSin * carHalfWidth;
+  const rightOverhang = Math.max(0, car.position.x + extentX - roadHalfWidth);
+  const leftOverhang = Math.max(0, -roadHalfWidth - (car.position.x - extentX));
+  const nearOverhang = Math.max(0, car.position.z + extentZ - roadHalfLength);
+  const farOverhang = Math.max(0, -roadHalfLength - (car.position.z - extentZ));
+  const sideOverhang = Math.max(rightOverhang, leftOverhang);
+  const endOverhang = Math.max(nearOverhang, farOverhang);
+  const overhang = Math.max(sideOverhang, endOverhang);
   if (overhang > 0) falling = true;
-  const fallSide = rightOverhang >= leftOverhang ? 1 : -1;
-  const targetRoll = falling ? fallSide * Math.min(1.15, 0.15 + overhang / carHalfWidth * 0.8) : 0;
+  const fallAngle = Math.min(1.15, 0.15 + overhang / Math.max(carHalfWidth, carHalfLength) * 0.8);
+  const targetRoll = falling && sideOverhang >= endOverhang ? (rightOverhang >= leftOverhang ? 1 : -1) * fallAngle : 0;
+  const targetPitch = falling && endOverhang > sideOverhang ? -Math.sign(car.position.z) * fallAngle : 0;
   car.rotation.z += (targetRoll - car.rotation.z) * Math.min(1, dt * 2.5);
+  car.rotation.x += (targetPitch - car.rotation.x) * Math.min(1, dt * 2.5);
   if (falling) {
     fallSpeed += 1800 * dt;
     car.position.y -= fallSpeed * dt;
