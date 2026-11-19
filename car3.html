@@ -26,6 +26,11 @@
   /* スライダーの横幅を設定します。 */
   #controls input { width: 130px; }
   #controls button.active { background: #d18a16; }
+  .panelTabs { display: flex; gap: 6px; }
+  .panelTabs button { flex: 1; }
+  .panelPage { display: none; flex-direction: column; gap: 8px; }
+  .panelPage.active { display: flex; }
+  #macroStatus { min-width: 155px; color: #dce7ef; }
 </style>
 </head>
 <body>
@@ -33,35 +38,47 @@
 <div id="help">↑ 前進　↓ 減速・後退　Q ブレーキ　← → ハンドル</div>
 <!-- 速度倍率、カメラ視点、横切る車の出現間隔を調整するUIです。 -->
 <div id="controls">
-  <div class="controlRow">
-    <label for="speedControl">速度</label>
-    <input id="speedControl" type="range" min="0.5" max="3" step="0.5" value="2">
-    <span id="speedValue">2.0倍</span>
+  <div class="panelTabs" role="tablist" aria-label="コントロールページ">
+    <button id="carTab" type="button" class="active" role="tab" aria-selected="true">車の操作</button>
+    <button id="macroTab" type="button" role="tab" aria-selected="false">マクロ</button>
   </div>
-  <div class="controlRow">
-    <span>視点</span>
-    <button id="cameraMode" type="button">一人称視点</button>
-    <button id="cameraLeft" type="button">← 左</button>
-    <button id="cameraRight" type="button">右 →</button>
+  <div id="carPage" class="panelPage active" role="tabpanel">
+    <div class="controlRow">
+      <label for="speedControl">速度</label>
+      <input id="speedControl" type="range" min="0.5" max="3" step="0.5" value="2">
+      <span id="speedValue">2.0倍</span>
+    </div>
+    <div class="controlRow">
+      <span>ライト</span><button id="lowBeamButton" type="button" aria-pressed="false">ロービーム OFF</button><button id="highBeamButton" type="button" aria-pressed="false">ハイビーム OFF</button><button id="leftSignalButton" type="button" aria-pressed="false">← 左ウィンカー</button><button id="rightSignalButton" type="button" aria-pressed="false">右ウィンカー →</button>
+    </div>
   </div>
-  <div class="controlRow">
-    <span>ライト</span><button id="lowBeamButton" type="button" aria-pressed="false">ロービーム OFF</button><button id="highBeamButton" type="button" aria-pressed="false">ハイビーム OFF</button><button id="leftSignalButton" type="button" aria-pressed="false">← 左ウィンカー</button><button id="rightSignalButton" type="button" aria-pressed="false">右ウィンカー →</button>
-  </div>
-  <div class="controlRow">
-    <span>時間帯</span><button id="timeOfDayButton" type="button" aria-pressed="false">夜にする</button>
-  </div>
-  <div class="controlRow">
-    <label for="trafficType">種類</label><select id="trafficType"><option value="car">普通</option><option value="truck">トラック</option><option value="bicycle">自転車</option></select>
-  </div>
-  <div class="controlRow">
-    <label for="trafficSize">大きさ</label><input id="trafficSize" type="range" min="0.6" max="1.6" step="0.1" value="1"><span id="trafficSizeValue">1.0倍</span>
-  </div>
-  <div class="controlRow">
-    <label for="trafficSpeed">速度</label><input id="trafficSpeed" type="range" min="500" max="3000" step="100" value="1500"><span id="trafficSpeedValue">1500</span>
-  </div>
-  <div class="controlRow">
-    <span>他の車</span>
-    <button id="spawnTrafficButton" type="button">車を発生</button>
+  <div id="macroPage" class="panelPage" role="tabpanel">
+    <div class="controlRow"><button id="recordMacroButton" type="button">● 記録開始</button><button id="stopMacroButton" type="button" disabled>停止</button></div>
+    <div class="controlRow"><button id="playMacroButton" type="button" disabled>▶ 再生</button><button id="clearMacroButton" type="button" disabled>消去</button></div>
+    <div id="macroStatus" aria-live="polite">記録した操作はありません</div>
+    <div>矢印キーと Q キーの操作を記録します。</div>
+    <div class="controlRow">
+      <span>視点</span>
+      <button id="cameraMode" type="button">一人称視点</button>
+      <button id="cameraLeft" type="button">← 左</button>
+      <button id="cameraRight" type="button">右 →</button>
+    </div>
+    <div class="controlRow">
+      <span>時間帯</span><button id="timeOfDayButton" type="button" aria-pressed="false">夜にする</button>
+    </div>
+    <div class="controlRow">
+      <label for="trafficType">種類</label><select id="trafficType"><option value="car">普通</option><option value="truck">トラック</option><option value="bicycle">自転車</option></select>
+    </div>
+    <div class="controlRow">
+      <label for="trafficSize">大きさ</label><input id="trafficSize" type="range" min="0.6" max="1.6" step="0.1" value="1"><span id="trafficSizeValue">1.0倍</span>
+    </div>
+    <div class="controlRow">
+      <label for="trafficSpeed">速度</label><input id="trafficSpeed" type="range" min="500" max="3000" step="100" value="1500"><span id="trafficSpeedValue">1500</span>
+    </div>
+    <div class="controlRow">
+      <span>他の車</span>
+      <button id="spawnTrafficButton" type="button">車を発生</button>
+    </div>
   </div>
 </div>
 <script>
@@ -333,14 +350,99 @@ function explodeAt(position) {
 
 // 押されているキーを記録し、押下・解放・ウィンドウ離脱を追跡します。
 const keys = Object.create(null);
+const macroKeys = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyQ"]);
+const macroStatus = document.getElementById("macroStatus");
+const recordMacroButton = document.getElementById("recordMacroButton");
+const stopMacroButton = document.getElementById("stopMacroButton");
+const playMacroButton = document.getElementById("playMacroButton");
+const clearMacroButton = document.getElementById("clearMacroButton");
+function updateMacroUI(message) {
+  macroStatus.textContent = message;
+  recordMacroButton.disabled = macroRecording;
+  stopMacroButton.disabled = !macroRecording && !macroPlaying;
+  playMacroButton.disabled = macroRecording || macroPlaying || macroEvents.length === 0;
+  clearMacroButton.disabled = macroRecording || macroPlaying || macroEvents.length === 0;
+}
+function releaseMacroKeys() { for (const code of macroKeys) keys[code] = false; }
+function stopMacroRecording() {
+  if (!macroRecording) return;
+  const now = performance.now();
+  for (const code of macroKeys) if (keys[code]) macroEvents.push({ time: now - macroStartedAt, code, down: false });
+  macroDuration = now - macroStartedAt;
+  macroRecording = false;
+  releaseMacroKeys();
+  updateMacroUI(macroEvents.length ? `記録完了：${(macroDuration / 1000).toFixed(1)}秒` : "操作が記録されませんでした");
+}
+function stopMacroPlayback() {
+  macroPlaying = false;
+  releaseMacroKeys();
+  updateMacroUI("マクロを再生しました");
+}
+let macroEvents = [];
+let macroRecording = false;
+let macroPlaying = false;
+let macroStartedAt = 0;
+let macroPlaybackStartedAt = 0;
+let macroPlaybackIndex = 0;
+let macroDuration = 0;
 window.addEventListener('keydown', (event) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) event.preventDefault();
+  if (macroKeys.has(event.code) && !keys[event.code] && macroRecording) macroEvents.push({ time: performance.now() - macroStartedAt, code: event.code, down: true });
   keys[event.key] = true;
   keys[event.code] = true;
 });
-window.addEventListener('keyup', (event) => { keys[event.key] = false; keys[event.code] = false; });
-window.addEventListener('blur', () => { for (const key in keys) keys[key] = false; });
+window.addEventListener('keyup', (event) => {
+  if (macroKeys.has(event.code) && keys[event.code] && macroRecording) macroEvents.push({ time: performance.now() - macroStartedAt, code: event.code, down: false });
+  keys[event.key] = false; keys[event.code] = false;
+});
+window.addEventListener('blur', () => {
+  if (macroRecording) stopMacroRecording();
+  if (macroPlaying) stopMacroPlayback();
+  for (const key in keys) keys[key] = false;
+});
 
+// パネルのタブ切り替えと運転操作マクロを管理します。
+const carTab = document.getElementById("carTab");
+const macroTab = document.getElementById("macroTab");
+const carPage = document.getElementById("carPage");
+const macroPage = document.getElementById("macroPage");
+function showControlPage(page) {
+  const showCar = page === "car";
+  carPage.classList.toggle("active", showCar);
+  macroPage.classList.toggle("active", !showCar);
+  carTab.classList.toggle("active", showCar);
+  macroTab.classList.toggle("active", !showCar);
+  carTab.setAttribute("aria-selected", String(showCar));
+  macroTab.setAttribute("aria-selected", String(!showCar));
+}
+carTab.addEventListener("click", () => showControlPage("car"));
+macroTab.addEventListener("click", () => showControlPage("macro"));
+recordMacroButton.addEventListener("click", () => {
+  if (macroPlaying) stopMacroPlayback();
+  releaseMacroKeys();
+  macroEvents = [];
+  macroDuration = 0;
+  macroStartedAt = performance.now();
+  macroRecording = true;
+  updateMacroUI("記録中…矢印キーと Q キーを操作してください");
+});
+stopMacroButton.addEventListener("click", () => {
+  if (macroRecording) stopMacroRecording();
+  else if (macroPlaying) stopMacroPlayback();
+});
+playMacroButton.addEventListener("click", () => {
+  if (!macroEvents.length) return;
+  releaseMacroKeys();
+  macroPlaybackIndex = 0;
+  macroPlaybackStartedAt = performance.now();
+  macroPlaying = true;
+  updateMacroUI("マクロを再生中…");
+});
+clearMacroButton.addEventListener("click", () => {
+  macroEvents = [];
+  macroDuration = 0;
+  updateMacroUI("記録した操作はありません");
+});
 // 車速・車の進行向き・カメラ向き・一人称視点の状態を保持します。
 let speed = 0;
 let falling = false;
@@ -479,6 +581,14 @@ function draw() {
       lamp.material.emissive.setHex(on ? 0xff9d00 : 0x000000);
       lamp.material.color.setHex(on ? 0xffb21c : 0x5a3200);
     }
+  }
+  if (macroPlaying) {
+    const elapsed = performance.now() - macroPlaybackStartedAt;
+    while (macroPlaybackIndex < macroEvents.length && macroEvents[macroPlaybackIndex].time <= elapsed) {
+      const event = macroEvents[macroPlaybackIndex++];
+      keys[event.code] = event.down;
+    }
+    if (elapsed >= macroDuration && macroPlaybackIndex >= macroEvents.length) stopMacroPlayback();
   }
   // ↑キーでNマーク方向へ前進し、↓キーで減速して停止後は後退します。
   const speedMultiplier = Number(speedControl.value);
