@@ -621,11 +621,13 @@ function draw() {
   const farOverhang = Math.max(0, -roadHalfLength - (car.position.z - extentZ));
   const sideOverhang = Math.max(rightOverhang, leftOverhang);
   const endOverhang = Math.max(nearOverhang, farOverhang);
-  const overhang = Math.max(sideOverhang, endOverhang);
-  if (overhang > 0) falling = true;
-  const fallAngle = Math.min(1.15, 0.15 + overhang / Math.max(carHalfWidth, carHalfLength) * 0.8);
-  const targetRoll = falling && sideOverhang >= endOverhang ? (rightOverhang >= leftOverhang ? 1 : -1) * fallAngle : 0;
-  const targetPitch = falling && endOverhang > sideOverhang ? -Math.sign(car.position.z) * fallAngle : 0;
+  const sideFallDistance = Math.max(0, sideOverhang - extentX);
+  const endFallDistance = Math.max(0, endOverhang - extentZ);
+  const fallDistance = Math.max(sideFallDistance, endFallDistance);
+  if (fallDistance > 0) falling = true;
+  const fallAngle = Math.min(1.15, 0.15 + fallDistance / Math.max(extentX, extentZ) * 0.8);
+  const targetRoll = falling && sideFallDistance >= endFallDistance ? (rightOverhang >= leftOverhang ? 1 : -1) * fallAngle : 0;
+  const targetPitch = falling && endFallDistance > sideFallDistance ? -Math.sign(car.position.z) * fallAngle : 0;
   car.rotation.z += (targetRoll - car.rotation.z) * Math.min(1, dt * 2.5);
   car.rotation.x += (targetPitch - car.rotation.x) * Math.min(1, dt * 2.5);
   if (falling) {
