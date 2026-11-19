@@ -95,8 +95,8 @@ scene.add(ground);
 
 // 直線道路：前後に長く続く一本道です。
 const asphalt = new THREE.MeshStandardMaterial({ color: 0x34383d, roughness: 0.95 });
-const roadAlongZ = new THREE.Mesh(new THREE.BoxGeometry(5000, 26, 50000), asphalt);
-roadAlongZ.position.y = -284;
+const roadAlongZ = new THREE.Mesh(new THREE.BoxGeometry(5000, 20, 50000), asphalt);
+roadAlongZ.position.y = -303;
 roadAlongZ.receiveShadow = true;
 scene.add(roadAlongZ);
 const paint = new THREE.MeshStandardMaterial({ color: 0xf4f0d8, roughness: 0.8 });
@@ -114,7 +114,7 @@ for (let z = -24000; z <= 24000; z += 1800) roadMark(35, 8, 900, 0, -266, z);
 // プレイヤーが操作する車を複数の部品で組み立てる親グループです。
 const car = new THREE.Group();
 scene.add(car);
-car.position.set(-1100, 0, 22000);
+car.position.set(-1100, 234, 22000);
 car.scale.setScalar(1.7);
 // Nマークが車の前に来るよう、車体とマークを一緒に180度回転します。
 car.rotation.y = Math.PI;
@@ -283,7 +283,7 @@ function makeTrafficCar() {
   vehicle.userData.travelSpeed = speed;
   vehicle.userData.laneChangeRate = kind === 'truck' ? 1 : kind === 'bicycle' ? 4 : 3;
   vehicle.userData.kind = kind;
-  vehicle.position.set(car.position.x < 0 ? -1000 : 600, 0, 16000);
+  vehicle.position.set(car.position.x < 0 ? -1000 : 600, kind === 'bicycle' ? 307 * size : (cfg.height * 0.28 + 180) * size * 1.7 - 293, 16000);
   vehicle.rotation.y = Math.PI;
   const lightOffsets = kind === 'bicycle' ? [0] : [-cfg.width * 0.3, cfg.width * 0.3];
   for (const x of lightOffsets) {
@@ -343,6 +343,8 @@ window.addEventListener('blur', () => { for (const key in keys) keys[key] = fals
 
 // 車速・車の進行向き・カメラ向き・一人称視点の状態を保持します。
 let speed = 0;
+let falling = false;
+let fallSpeed = 0;
 let movementYaw = car.rotation.y;
 let cameraYaw = 0;
 let firstPersonView = false;
@@ -490,6 +492,19 @@ function draw() {
     const turnAmount = steering * 0.9 * dt * (Math.abs(speed) > 5 ? Math.sign(speed) : 1);
     movementYaw += turnAmount;
     car.rotation.y += turnAmount;
+  }
+  const roadEdge = 2500;
+  const carHalfWidth = 900 * car.scale.x / 2;
+  const rightOverhang = Math.max(0, car.position.x + carHalfWidth - roadEdge);
+  const leftOverhang = Math.max(0, -roadEdge - (car.position.x - carHalfWidth));
+  const overhang = Math.max(rightOverhang, leftOverhang);
+  if (overhang > 0) falling = true;
+  const fallSide = rightOverhang >= leftOverhang ? 1 : -1;
+  const targetRoll = falling ? fallSide * Math.min(1.15, 0.15 + overhang / carHalfWidth * 0.8) : 0;
+  car.rotation.z += (targetRoll - car.rotation.z) * Math.min(1, dt * 2.5);
+  if (falling) {
+    fallSpeed += 1800 * dt;
+    car.position.y -= fallSpeed * dt;
   }
   if (Math.abs(speed) > 5) {
 
